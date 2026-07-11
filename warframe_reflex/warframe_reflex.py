@@ -5,13 +5,6 @@ from .state import CalculatorState
 
 
 app = rx.App(
-    theme=rx.theme(
-        appearance="dark",
-        accent_color="tomato",
-        gray_color="slate",
-        radius="medium",
-        scaling="100%",
-    ),
     stylesheets=["/styles.css"],
 )
 
