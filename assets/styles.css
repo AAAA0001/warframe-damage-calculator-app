@@ -290,5 +290,10 @@ body {
   flex: 1 1 100% !important;
   align-self: stretch !important;
   box-sizing: border-box !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  align-items: center !important;
 }
 
