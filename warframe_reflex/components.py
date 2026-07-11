@@ -315,6 +315,10 @@ def progenitor_controls() -> rx.Component:
     )
 
 
+def supported_progenitor_controls() -> rx.Component:
+    return rx.cond(CalculatorState.supports_progenitor, progenitor_controls())
+
+
 def custom_damage_controls() -> rx.Component:
     ranged_tabs = rx.tabs.root(
         rx.tabs.list(
@@ -597,7 +601,7 @@ def custom_base_stats() -> rx.Component:
     return rx.vstack(
         rx.cond(CalculatorState.ranged_weapon, toggle_grid),
         custom_damage_controls(),
-        progenitor_controls(),
+        supported_progenitor_controls(),
         rx.cond(CalculatorState.ranged_weapon, ranged_core, melee_core),
         width="100%",
         gap="5",
@@ -630,7 +634,7 @@ def weapon_section() -> rx.Component:
                 rx.cond(
                     CalculatorState.custom_weapon,
                     custom_base_stats(),
-                    progenitor_controls(),
+                    supported_progenitor_controls(),
                 ),
                 width="100%",
                 gap="5",

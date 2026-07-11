@@ -24,6 +24,7 @@ from .data import (
     database_max_stacks,
     database_rank_bounds,
     database_upgrade,
+    raw_weapon_metadata,
     upgrade_names_for_ui,
     weapon_names_for_type,
 )
@@ -210,6 +211,10 @@ class CalculatorState(rx.State):
     @rx.var
     def has_error(self) -> bool:
         return bool(self.result_error)
+
+    @rx.var
+    def supports_progenitor(self) -> bool:
+        return self._supports_progenitor()
 
     @rx.event
     def initialize(self):
@@ -665,6 +670,15 @@ class CalculatorState(rx.State):
             "explosion_forced_proc",
         )
 
+    def _supports_progenitor(self) -> bool:
+        if self.custom_weapon:
+            return True
+        metadata = raw_weapon_metadata(
+            self.selected_weapon_type,
+            self.selected_weapon,
+        )
+        return bool(metadata.get("is_progenitor", False))
+
     def _get_damage_fields(self, group: str) -> list[EditorField]:
         return getattr(self, f"{group}_fields", [])
 
@@ -765,7 +779,7 @@ class CalculatorState(rx.State):
         self.slot_stat_rows = [upgrade_stat_rows(upgrade) for upgrade in slot_upgrades]
 
         progenitor = progenitor_upgrade(
-            self.progenitor_element,
+            self.progenitor_element if self._supports_progenitor() else NO_EFFECT,
             self.progenitor_value,
             NO_EFFECT,
         )
