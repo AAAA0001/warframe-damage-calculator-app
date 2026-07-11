@@ -43,6 +43,40 @@ def labeled_control(label: str, control: rx.Component) -> rx.Component:
     )
 
 
+def select_input(
+    options,
+    value,
+    on_change,
+    *,
+    disabled=False,
+) -> rx.Component:
+    """Render a full-width, 32px-high Radix select trigger."""
+    return rx.select.root(
+        rx.select.trigger(
+            width="100%",
+            min_width="0",
+            max_width="100%",
+            height="32px",
+            min_height="32px",
+            class_name="full-width-select-trigger",
+            custom_attrs={"data-full-width-select": "true"},
+        ),
+        rx.select.content(
+            rx.select.group(
+                rx.foreach(
+                    options,
+                    lambda option: rx.select.item(option, value=option),
+                ),
+            ),
+            position="popper",
+        ),
+        value=value,
+        on_change=on_change,
+        disabled=disabled,
+        width="100%",
+    )
+
+
 def select_control(
     label: str,
     options,
@@ -51,36 +85,12 @@ def select_control(
     *,
     disabled=False,
 ) -> rx.Component:
-    """Render a select whose actual Radix trigger always fills its column.
-
-    The high-level ``rx.select`` wrapper may attach sizing props to a generated
-    wrapper differently between development and production builds. Using the
-    low-level API lets us put the full-width class directly on the trigger
-    button, which is the visible interactive element.
-    """
     return labeled_control(
         label,
-        rx.select.root(
-            rx.select.trigger(
-                width="100%",
-                min_width="0",
-                max_width="100%",
-                height="32px",
-                min_height="32px",
-                class_name="full-width-select-trigger",
-                custom_attrs={"data-full-width-select": "true"},
-            ),
-            rx.select.content(
-                rx.select.group(
-                    rx.foreach(
-                        options,
-                        lambda option: rx.select.item(option, value=option),
-                    ),
-                ),
-                position="popper",
-            ),
-            value=value,
-            on_change=on_change,
+        select_input(
+            options,
+            value,
+            on_change,
             disabled=disabled,
         ),
     )
@@ -795,12 +805,10 @@ def upgrade_slot(index: int) -> rx.Component:
                 width="100%",
                 align="center",
             ),
-            rx.select(
+            select_input(
                 slot_options(index),
-                value=CalculatorState.slot_selected_upgrades[index],
-                on_change=lambda value: CalculatorState.set_slot_upgrade(index, value),
-                width="100%",
-                position="popper",
+                CalculatorState.slot_selected_upgrades[index],
+                lambda value: CalculatorState.set_slot_upgrade(index, value),
             ),
             rx.cond(
                 CalculatorState.slot_selected_upgrades[index] != CUSTOM,
