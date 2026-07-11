@@ -1088,11 +1088,7 @@ def results_section() -> rx.Component:
             rx.vstack(
                 rx.cond(
                     CalculatorState.ranged_weapon,
-                    metric_grid(
-                        CalculatorState.main_result_metrics,
-                        CalculatorState.weakpoint_result_metrics,
-                        CalculatorState.misc_result_metrics,
-                    ),
+                    metric_grid(CalculatorState.ranged_result_metrics),
                     metric_grid(CalculatorState.main_result_metrics),
                 ),
                 panel(result_tabs()),

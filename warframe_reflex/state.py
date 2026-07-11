@@ -187,6 +187,7 @@ class CalculatorState(rx.State):
 
     main_result_metrics: list[MetricRow] = rx.field(default_factory=list)
     weakpoint_result_metrics: list[MetricRow] = rx.field(default_factory=list)
+    ranged_result_metrics: list[MetricRow] = rx.field(default_factory=list)
     misc_result_metrics: list[MetricRow] = rx.field(default_factory=list)
     damage_result_rows: list[DamageResultRow] = rx.field(default_factory=list)
     contribution_result_rows: list[ContributionRow] = rx.field(default_factory=list)
@@ -824,10 +825,19 @@ class CalculatorState(rx.State):
             self.main_result_metrics = main_metrics(weapon)
             if self.selected_weapon_type == "Melee":
                 self.weakpoint_result_metrics = []
+                self.ranged_result_metrics = []
                 self.misc_result_metrics = []
             else:
                 self.weakpoint_result_metrics = weakpoint_metrics(weapon)
                 self.misc_result_metrics = ranged_misc_metrics(weapon)
+                self.ranged_result_metrics = [
+                    metric
+                    for pair in zip(
+                        self.main_result_metrics,
+                        self.weakpoint_result_metrics,
+                    )
+                    for metric in pair
+                ] + self.misc_result_metrics
             self.damage_result_rows = effective_damage_rows(
                 weapon,
                 melee=self.selected_weapon_type == "Melee",
@@ -843,6 +853,7 @@ class CalculatorState(rx.State):
             self.slot_contributions = ["—" for _ in SLOT_CONFIGS]
             self.main_result_metrics = []
             self.weakpoint_result_metrics = []
+            self.ranged_result_metrics = []
             self.misc_result_metrics = []
             self.damage_result_rows = []
             self.contribution_result_rows = []

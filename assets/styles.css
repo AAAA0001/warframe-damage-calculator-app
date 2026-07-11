@@ -281,10 +281,19 @@ body {
   .panel { padding: 0.8rem; }
 
   .slot-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: none;
     gap: 10px;
   }
+
+  /* Keep the eight normal mods first, with Arcane and Exilus paired in the
+     final row of the two-column mobile grid. */
+  .slot-grid > :nth-child(5) { order: 9; }
+  .slot-grid > :nth-child(6) { order: 5; }
+  .slot-grid > :nth-child(7) { order: 6; }
+  .slot-grid > :nth-child(8) { order: 7; }
+  .slot-grid > :nth-child(9) { order: 8; }
+  .slot-grid > :nth-child(10) { order: 10; }
 
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -316,27 +325,10 @@ body {
   [role="tablist"]::-webkit-scrollbar { display: none; }
 
   [role="tab"] {
-    min-height: 42px;
     flex: 0 0 auto;
     white-space: nowrap;
   }
 
-  input, button, [data-radix-select-trigger] { font-size: 16px !important; }
-
-  input, [data-radix-select-trigger],
-  .full-width-select-trigger, [data-full-width-select="true"] {
-    min-height: 42px !important;
-    height: 42px !important;
-  }
-
-  .icon-button {
-    width: 42px !important;
-    min-width: 42px !important;
-    height: 42px !important;
-    min-height: 42px !important;
-  }
-
-  .toggle-control { min-height: 48px; }
   table { min-width: 620px; }
 
   pre {
@@ -350,10 +342,6 @@ body {
     overflow-wrap: anywhere;
   }
 
-}
-
-@media (max-width: 380px) {
-  .metric-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Explicit spacing for upgrade-card controls. Reflex theme spacing can be
@@ -435,14 +423,4 @@ body {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   align-items: center !important;
-}
-
-/* This rule must follow the desktop select sizing above so phone controls keep
-   a comfortable touch target. */
-@media (max-width: 620px) {
-  .full-width-select-trigger,
-  [data-full-width-select="true"] {
-    height: 42px !important;
-    min-height: 42px !important;
-  }
 }
