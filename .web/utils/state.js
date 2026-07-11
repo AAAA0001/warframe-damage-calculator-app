@@ -1,6 +1,5 @@
 // State management for Reflex web apps.
 import io from "socket.io-client";
-import JSON5 from "json5";
 import env from "$/env.json";
 import reflexEnvironment from "$/reflex.json";
 import Cookies from "universal-cookie";
@@ -40,10 +39,19 @@ const cookies = new Cookies();
 // Dictionary holding component references.
 export const refs = {};
 
-// Flag ensures that only one event is processing on the backend concurrently.
-let event_processing = false;
 // Array holding pending events to be processed.
 const event_queue = [];
+
+// Mirrors the data router's location so applyEvent can populate router_data
+// with the in-widget URL. In embed mode the host page's window.location is
+// unrelated to the Reflex route, so the backend's on_load and dynamic-route
+// matching rely on this ref instead. Updated by useEventLoop once mounted;
+// pre-seeded in embed mode with the memory router's initial path (see
+// initialEntries in entry.client.embed.js) so events dispatched before the
+// first effect commit don't briefly fall back to the host page's URL.
+const locationRef = {
+  current: env.MOUNT_TARGET ? { pathname: "/", search: "", hash: "" } : null,
+};
 
 /**
  * Generate a UUID (Used for session tokens).
@@ -203,14 +211,12 @@ function urlFrom(string) {
  * @param socket The socket object to send the event on.
  * @param navigate The navigate function from useNavigate
  * @param params The params object from useParams
- *
- * @returns True if the event was sent, false if it was handled locally.
  */
 export const applyEvent = async (event, socket, navigate, params) => {
   // Handle special events
   if (event.name == "_redirect") {
     if ((event.payload.path ?? undefined) === undefined) {
-      return false;
+      return;
     }
     if (event.payload.external) {
       window.open(
@@ -218,7 +224,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
         "_blank",
         "noopener" + (event.payload.popup ? ",popup" : ""),
       );
-      return false;
+      return;
     }
     const url = urlFrom(event.payload.path);
     let pathname = event.payload.path;
@@ -226,7 +232,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
       if (url.host !== window.location.host) {
         // External URL
         window.location.assign(event.payload.path);
-        return false;
+        return;
       } else {
         pathname = url.pathname + url.search + url.hash;
       }
@@ -236,37 +242,37 @@ export const applyEvent = async (event, socket, navigate, params) => {
     } else {
       navigate(pathname);
     }
-    return false;
+    return;
   }
 
   if (event.name == "_remove_cookie") {
     cookies.remove(event.payload.key, { ...event.payload.options });
     queueEventIfSocketExists(initialEvents(), socket, navigate, params);
-    return false;
+    return;
   }
 
   if (event.name == "_clear_local_storage") {
     localStorage.clear();
     queueEventIfSocketExists(initialEvents(), socket, navigate, params);
-    return false;
+    return;
   }
 
   if (event.name == "_remove_local_storage") {
     localStorage.removeItem(event.payload.key);
     queueEventIfSocketExists(initialEvents(), socket, navigate, params);
-    return false;
+    return;
   }
 
   if (event.name == "_clear_session_storage") {
     sessionStorage.clear();
     queueEventIfSocketExists(initialEvents(), socket, navigate, params);
-    return false;
+    return;
   }
 
   if (event.name == "_remove_session_storage") {
     sessionStorage.removeItem(event.payload.key);
     queueEventIfSocketExists(initialEvents(), socket, navigate, params);
-    return false;
+    return;
   }
 
   if (event.name == "_download") {
@@ -285,7 +291,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
     a.download = event.payload.filename;
     a.click();
     a.remove();
-    return false;
+    return;
   }
 
   if (event.name == "_set_focus") {
@@ -299,7 +305,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
     } else {
       current.focus();
     }
-    return false;
+    return;
   }
 
   if (event.name == "_blur_focus") {
@@ -313,7 +319,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
     } else {
       current.blur();
     }
-    return false;
+    return;
   }
 
   if (event.name == "_set_value") {
@@ -322,7 +328,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
     if (ref.current) {
       ref.current.value = event.payload.value;
     }
-    return false;
+    return;
   }
 
   if (
@@ -348,7 +354,7 @@ export const applyEvent = async (event, socket, navigate, params) => {
         window.onerror(e.message, null, null, null, e);
       }
     }
-    return false;
+    return;
   }
 
   if (event.name == "_call_script" || event.name == "_call_function") {
@@ -375,36 +381,42 @@ export const applyEvent = async (event, socket, navigate, params) => {
         window.onerror(e.message, null, null, null, e);
       }
     }
-    return false;
+    return;
   }
 
   // Update token and router data (if missing).
-  event.token = getToken();
   if (
     event.router_data === undefined ||
     Object.keys(event.router_data).length === 0
   ) {
-    // Since we don't have router directly, we need to get info from our hooks
+    const loc = locationRef.current ?? window.location;
+    // React Router's location (mirrored in locationRef) does not observe direct
+    // window.history.pushState/replaceState calls (e.g. via rx.call_script), so
+    // read the live query string and hash to keep router_data in sync. The
+    // pathname stays basename-relative (from React Router) so the backend's
+    // frontend_path prefix is not applied twice. In embed mode the host page's
+    // window.location is unrelated to the in-widget memory router, so use the
+    // mirrored location there.
+    const liveLoc = env.MOUNT_TARGET ? loc : window.location;
+    const search = liveLoc.search ?? "";
+    const hash = liveLoc.hash ?? "";
     event.router_data = {
-      pathname: window.location.pathname,
-      query: {
-        ...Object.fromEntries(new URLSearchParams(window.location.search)),
-        ...params(),
-      },
-      asPath:
-        window.location.pathname +
-        window.location.search +
-        window.location.hash,
+      pathname: loc.pathname,
+      asPath: loc.pathname + search + hash,
     };
+    const query = {
+      ...Object.fromEntries(new URLSearchParams(search)),
+      ...params.current,
+    };
+    if (query && Object.keys(query).length > 0) {
+      event.router_data.query = query;
+    }
   }
 
   // Send the event to the server.
   if (socket) {
     socket.emit("event", event);
-    return true;
   }
-
-  return false;
 };
 
 /**
@@ -413,22 +425,15 @@ export const applyEvent = async (event, socket, navigate, params) => {
  * @param socket The socket object to send the response event(s) on.
  * @param navigate The navigate function from React Router
  * @param params The params object from React Router
- *
- * @returns Whether the event was sent.
  */
 export const applyRestEvent = async (event, socket, navigate, params) => {
-  let eventSent = false;
   if (event.handler === "uploadFiles") {
-    if (event.payload.files === undefined || event.payload.files.length === 0) {
-      // Submit the event over the websocket to trigger the event handler.
-      return await applyEvent(
-        ReflexEvent(event.name, { files: [] }),
-        socket,
-        navigate,
-        params,
-      );
+    // The compiled event names its extra bound handler args; collect just those
+    // so they reach the backend handler (no need to know the reserved keys).
+    const extra_args = {};
+    for (const name of event.payload.__reflex_event_arg_names ?? []) {
+      extra_args[name] = event.payload[name];
     }
-
     // Start upload, but do not wait for it, which would block other events.
     uploadFiles(
       event.name,
@@ -436,14 +441,13 @@ export const applyRestEvent = async (event, socket, navigate, params) => {
       event.payload.upload_id,
       event.payload.on_upload_progress,
       event.payload.extra_headers,
+      extra_args,
       socket,
       refs,
       getBackendURL,
       getToken,
     );
-    return false;
   }
-  return eventSent;
 };
 
 /**
@@ -455,6 +459,25 @@ export const applyRestEvent = async (event, socket, navigate, params) => {
 const resolveSocket = (socket) => {
   return socket?.current ?? socket;
 };
+
+// Python's json.dumps emits bare Infinity/-Infinity/NaN tokens (invalid JSON).
+// Rewrite them outside string literals so JSON.parse accepts the payload.
+// 1e999 / -1e999 overflow to ±Infinity; NaN has no JSON literal, so it is
+// swapped for a sentinel string and revived back to NaN after parsing.
+// The alternation matches whole string literals first (passed through unchanged),
+// guaranteeing bare-token matches only land in numeric positions.
+const NAN_SENTINEL = "__reflex_nan__";
+const NON_FINITE_FLOAT_RE = /"(?:[^"\\]|\\.)*"|-?\bInfinity\b|\bNaN\b/g;
+const NON_FINITE_REPLACEMENTS = {
+  Infinity: "1e999",
+  "-Infinity": "-1e999",
+  NaN: `"${NAN_SENTINEL}"`,
+};
+const rewriteBareNonFiniteFloats = (str) =>
+  str.replace(NON_FINITE_FLOAT_RE, (match) =>
+    match[0] === '"' ? match : NON_FINITE_REPLACEMENTS[match],
+  );
+const reviveNonFiniteFloats = (_k, v) => (v === NAN_SENTINEL ? NaN : v);
 
 /**
  * Queue events to be processed and trigger processing of queue.
@@ -497,28 +520,21 @@ export const processEvent = async (socket, navigate, params) => {
   }
 
   // Only proceed if we're not already processing an event.
-  if (event_queue.length === 0 || event_processing) {
+  if (event_queue.length === 0) {
     return;
   }
-
-  // Set processing to true to block other events from being processed.
-  event_processing = true;
 
   // Apply the next event in the queue.
   const event = event_queue.shift();
 
-  let eventSent = false;
   // Process events with handlers via REST and all others via websockets.
   if (event.handler) {
-    eventSent = await applyRestEvent(event, socket, navigate, params);
+    await applyRestEvent(event, socket, navigate, params);
   } else {
-    eventSent = await applyEvent(event, socket, navigate, params);
+    await applyEvent(event, socket, navigate, params);
   }
-  // If no event was sent, set processing to false.
-  if (!eventSent) {
-    event_processing = false;
-    // recursively call processEvent to drain the queue, since there is
-    // no state update to trigger the useEffect event loop.
+  // Process any remaining events.
+  if (event_queue.length > 0) {
     await processEvent(socket, navigate, params);
   }
 };
@@ -568,9 +584,16 @@ export const connect = async (
   socket.current.io.encoder.replacer = (k, v) => (v === undefined ? null : v);
   socket.current.io.decoder.tryParse = (str) => {
     try {
-      return JSON5.parse(str);
+      return JSON.parse(str);
     } catch (e) {
-      return false;
+      try {
+        return JSON.parse(
+          rewriteBareNonFiniteFloats(str),
+          reviveNonFiniteFloats,
+        );
+      } catch (e2) {
+        return false;
+      }
     }
   };
   // Set up a reconnect helper function
@@ -610,16 +633,21 @@ export const connect = async (
 
   const disconnectTrigger = (event) => {
     if (socket.current?.connected) {
-      console.log("Disconnect websocket on unload");
+      console.log("Disconnect websocket on page navigation");
       socket.current.disconnect();
     }
   };
 
   const pagehideHandler = (event) => {
-    if (event.persisted && socket.current?.connected) {
-      console.log("Disconnect backend before bfcache on navigation");
-      socket.current.disconnect();
+    if (!socket.current?.connected) {
+      return;
     }
+    if (event.persisted) {
+      console.log("Disconnect backend before bfcache on navigation");
+    } else {
+      console.log("Disconnect websocket on pagehide");
+    }
+    socket.current.disconnect();
   };
 
   // Once the socket is open, hydrate the page.
@@ -628,20 +656,13 @@ export const connect = async (
     setConnectErrors([]);
     window.addEventListener("pagehide", pagehideHandler);
     window.addEventListener("beforeunload", disconnectTrigger);
-    window.addEventListener("unload", disconnectTrigger);
     if (socket.current.rehydrate) {
       socket.current.rehydrate = false;
-      queueEvents(
-        initialEvents(),
-        socket,
-        true,
-        navigate,
-        () => params.current,
-      );
+      queueEvents(initialEvents(), socket, true, navigate, params);
     }
     // Drain any initial events from the queue.
-    while (event_queue.length > 0 && !event_processing) {
-      await processEvent(socket.current, navigate, () => params.current);
+    while (event_queue.length > 0) {
+      await processEvent(socket.current, navigate, params);
     }
   });
 
@@ -660,13 +681,10 @@ export const connect = async (
     }, 200 * n_connect_errors); // Incremental backoff
   });
 
-  // When the socket disconnects reset the event_processing flag
   socket.current.on("disconnect", (reason, details) => {
     socket.current.wait_connect = false;
     const try_reconnect =
       reason !== "io server disconnect" && reason !== "io client disconnect";
-    event_processing = false;
-    window.removeEventListener("unload", disconnectTrigger);
     window.removeEventListener("beforeunload", disconnectTrigger);
     window.removeEventListener("pagehide", pagehideHandler);
     if (try_reconnect) {
@@ -677,29 +695,23 @@ export const connect = async (
 
   // On each received message, queue the updates and events.
   socket.current.on("event", async (update) => {
-    for (const substate in update.delta) {
-      dispatch[substate](update.delta[substate]);
-      // handle events waiting for `is_hydrated`
-      if (
-        substate === state_name &&
-        update.delta[substate]?.is_hydrated_rx_state_
-      ) {
-        queueEvents(on_hydrated_queue, socket, false, navigate, params);
-        on_hydrated_queue.length = 0;
+    if (update.delta && Object.keys(update.delta).length > 0) {
+      for (const substate in update.delta) {
+        dispatch[substate](update.delta[substate]);
+        // handle events waiting for `is_hydrated`
+        if (
+          substate === state_name &&
+          update.delta[substate]?.is_hydrated_rx_state_
+        ) {
+          queueEvents(on_hydrated_queue, socket, false, navigate, params);
+          on_hydrated_queue.length = 0;
+        }
       }
+      applyClientStorageDelta(client_storage, update.delta);
     }
-    applyClientStorageDelta(client_storage, update.delta);
-    if (update.final !== null) {
-      event_processing = !update.final;
-    }
-    if (update.events) {
+    if (update.events && update.events.length > 0) {
       queueEvents(update.events, socket, false, navigate, params);
     }
-  });
-  socket.current.on("reload", async (event) => {
-    event_processing = false;
-    on_hydrated_queue.push(event);
-    queueEvents(initialEvents(), socket, true, navigate, params);
   });
   socket.current.on("new_token", async (new_token) => {
     token = new_token;
@@ -723,7 +735,64 @@ export const ReflexEvent = (
   event_actions = {},
   handler = null,
 ) => {
-  return { name, payload, handler, event_actions };
+  const e = { name };
+  if (payload && Object.keys(payload).length > 0) {
+    e.payload = payload;
+  }
+  if (event_actions && Object.keys(event_actions).length > 0) {
+    e.event_actions = event_actions;
+  }
+  if (handler !== null) {
+    e.handler = handler;
+  }
+  return e;
+};
+
+/**
+ * Apply event actions before invoking a target function.
+ * @param {Function} target The function to invoke after applying event actions.
+ * @param {Object.<string, (number|boolean)>} event_actions The actions to apply.
+ * @param {Array<any>|any} args The event args.
+ * @param {string|null} action_key A stable key for debounce/throttle tracking.
+ * @param {Function|null} temporal_handler Returns whether temporal actions may run.
+ * @returns The target result, if it runs immediately.
+ */
+export const applyEventActions = (
+  target,
+  event_actions = {},
+  args = [],
+  action_key = null,
+  temporal_handler = null,
+) => {
+  if (!(args instanceof Array)) {
+    args = [args];
+  }
+
+  const _e = args.find((o) => o?.preventDefault !== undefined);
+
+  if (event_actions?.preventDefault && _e?.preventDefault) {
+    _e.preventDefault();
+  }
+  if (event_actions?.stopPropagation && _e?.stopPropagation) {
+    _e.stopPropagation();
+  }
+  if (event_actions?.temporal && temporal_handler && !temporal_handler()) {
+    return;
+  }
+
+  const invokeTarget = () => target(...args);
+  const resolved_action_key = action_key ?? target.toString();
+
+  if (event_actions?.throttle) {
+    if (!throttle(resolved_action_key, event_actions.throttle)) {
+      return;
+    }
+  }
+  if (event_actions?.debounce) {
+    debounce(resolved_action_key, invokeTarget, event_actions.debounce);
+    return;
+  }
+  return invokeTarget();
 };
 
 /**
@@ -862,6 +931,10 @@ export const useEventLoop = (
     }
   }, [paramsR]);
 
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+
   const ensureSocketConnected = useCallback(async () => {
     if (!mounted.current) {
       // During hot reload, some components may still have a reference to
@@ -882,7 +955,7 @@ export const useEventLoop = (
         setConnectErrors,
         client_storage,
         navigate,
-        () => params.current,
+        params,
       );
     }
   }, [
@@ -898,63 +971,30 @@ export const useEventLoop = (
   // Function to add new events to the event queue.
   const addEvents = useCallback((events, args, event_actions) => {
     const _events = events.filter((e) => e !== undefined && e !== null);
-    if (!event_actions?.temporal) {
-      // Reconnect socket if needed for non-temporal events.
-      ensureSocketConnected();
-    }
-
-    if (!(args instanceof Array)) {
-      args = [args];
-    }
 
     event_actions = _events.reduce(
       (acc, e) => ({ ...acc, ...e.event_actions }),
       event_actions ?? {},
     );
 
-    const _e = args.filter((o) => o?.preventDefault !== undefined)[0];
+    if (!event_actions?.temporal) {
+      // Reconnect socket if needed for non-temporal events.
+      ensureSocketConnected();
+    }
 
-    if (event_actions?.preventDefault && _e?.preventDefault) {
-      _e.preventDefault();
-    }
-    if (event_actions?.stopPropagation && _e?.stopPropagation) {
-      _e.stopPropagation();
-    }
-    const combined_name = _events.map((e) => e.name).join("+++");
-    if (event_actions?.temporal) {
-      if (!socket.current || !socket.current.connected) {
-        return; // don't queue when the backend is not connected
-      }
-    }
-    if (event_actions?.throttle) {
-      // If throttle returns false, the events are not added to the queue.
-      if (!throttle(combined_name, event_actions.throttle)) {
-        return;
-      }
-    }
-    if (event_actions?.debounce) {
-      // If debounce is used, queue the events after some delay
-      debounce(
-        combined_name,
-        () =>
-          queueEvents(_events, socket, false, navigate, () => params.current),
-        event_actions.debounce,
-      );
-    } else {
-      queueEvents(_events, socket, false, navigate, () => params.current);
-    }
+    return applyEventActions(
+      () => queueEvents(_events, socket, false, navigate, params),
+      event_actions,
+      args,
+      _events.map((e) => e.name).join("+++"),
+      () => !!socket.current?.connected,
+    );
   }, []);
 
   const sentHydrate = useRef(false); // Avoid double-hydrate due to React strict-mode
   useEffect(() => {
     if (!sentHydrate.current) {
-      queueEvents(
-        initial_events(),
-        socket,
-        true,
-        navigate,
-        () => params.current,
-      );
+      queueEvents(initial_events(), socket, true, navigate, params);
       sentHydrate.current = true;
     }
   }, []);
@@ -1018,9 +1058,9 @@ export const useEventLoop = (
     }
     (async () => {
       // Process all outstanding events.
-      while (event_queue.length > 0 && !event_processing) {
+      while (event_queue.length > 0) {
         await ensureSocketConnected();
-        await processEvent(socket.current, navigate, () => params.current);
+        await processEvent(socket.current, navigate, params);
       }
     })();
   });
@@ -1116,6 +1156,78 @@ export const isTrue = (val) => {
 export const isNotNullOrUndefined = (val) => {
   return (val ?? undefined) !== undefined;
 };
+
+/***
+ * Python-semantics OR: returns `a` if python-truthy, else evaluates and returns `b`.
+ * `b` is a thunk so it is only evaluated when needed, preserving short-circuit.
+ * @template A
+ * @template B
+ * @param {A} a The left-hand value.
+ * @param {() => B} b Thunk producing the right-hand value.
+ * @returns {A | B} `a` if python-truthy, otherwise the result of `b()`.
+ */
+export const pyOr = (a, b) => (isTrue(a) ? a : b());
+
+/***
+ * Python-semantics AND: returns `a` if python-falsy, else evaluates and returns `b`.
+ * `b` is a thunk so it is only evaluated when needed, preserving short-circuit.
+ * @template A
+ * @template B
+ * @param {A} a The left-hand value.
+ * @param {() => B} b Thunk producing the right-hand value.
+ * @returns {A | B} `a` if python-falsy, otherwise the result of `b()`.
+ */
+export const pyAnd = (a, b) => (isTrue(a) ? b() : a);
+
+/***
+ * Python-semantics str.lstrip: remove leading characters in the given set.
+ * @param {string} s The string to strip.
+ * @param {string?} chars Characters to remove; null/undefined strips whitespace.
+ * @returns {string} The stripped string.
+ */
+export const pyLstrip = (s, chars) => {
+  if (chars == null) return s.trimStart();
+  const charSet = new Set(chars);
+  let start = 0;
+  while (start < s.length) {
+    const cp = String.fromCodePoint(s.codePointAt(start));
+    if (!charSet.has(cp)) break;
+    start += cp.length;
+  }
+  return s.slice(start);
+};
+
+/***
+ * Python-semantics str.rstrip: remove trailing characters in the given set.
+ * @param {string} s The string to strip.
+ * @param {string?} chars Characters to remove; null/undefined strips whitespace.
+ * @returns {string} The stripped string.
+ */
+export const pyRstrip = (s, chars) => {
+  if (chars == null) return s.trimEnd();
+  const charSet = new Set(chars);
+  let end = s.length;
+  while (end > 0) {
+    // step back over a full code point (surrogate pairs are 2 units wide)
+    let cp = s[end - 1];
+    if (end > 1) {
+      const pair = String.fromCodePoint(s.codePointAt(end - 2));
+      if (pair.length === 2) cp = pair;
+    }
+    if (!charSet.has(cp)) break;
+    end -= cp.length;
+  }
+  return s.slice(0, end);
+};
+
+/***
+ * Python-semantics str.strip: remove leading and trailing characters in the given set.
+ * @param {string} s The string to strip.
+ * @param {string?} chars Characters to remove; null/undefined strips whitespace.
+ * @returns {string} The stripped string.
+ */
+export const pyStrip = (s, chars) =>
+  chars == null ? s.trim() : pyRstrip(pyLstrip(s, chars), chars);
 
 /**
  * Get the value from a ref.

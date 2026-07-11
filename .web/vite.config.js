@@ -38,13 +38,13 @@ function fullReload() {
 }
 
 export default defineConfig((config) => ({
+  base: "/",
   plugins: [
     alwaysUseReactDomServerNode(),
     reactRouter(),
     safariCacheBustPlugin(),
   ].concat([]),
   build: {
-    assetsDir: "/assets".slice(1),
     sourcemap: false,
     rollupOptions: {
       onwarn(warning, warn) {

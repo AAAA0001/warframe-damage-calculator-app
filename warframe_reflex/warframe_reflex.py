@@ -3,6 +3,7 @@ import reflex as rx
 from .components import page
 from .state import CalculatorState
 
+
 app = rx.App(
     theme=rx.theme(
         appearance="dark",
@@ -13,6 +14,7 @@ app = rx.App(
     ),
     stylesheets=["/styles.css"],
 )
+
 app.add_page(
     page,
     route="/",
