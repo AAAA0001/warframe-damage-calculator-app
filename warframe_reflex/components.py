@@ -51,16 +51,22 @@ def select_control(
 ) -> rx.Component:
     return labeled_control(
         label,
-        rx.select(
-            options,
-            value=value,
-            on_change=on_change,
-            disabled=disabled,
+        rx.box(
+            rx.select(
+                options,
+                value=value,
+                on_change=on_change,
+                disabled=disabled,
+                width="100%",
+                min_width="0",
+                max_width="100%",
+                position="popper",
+                style={"width": "100%", "min_width": "0"},
+            ),
             width="100%",
             min_width="0",
             max_width="100%",
-            position="popper",
-            class_name="full-width-select",
+            style={"width": "100%", "min_width": "0"},
         ),
     )
 
