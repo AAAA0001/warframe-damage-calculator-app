@@ -114,6 +114,9 @@ class CalculatorState(rx.State):
     mod_options: list[str] = rx.field(default_factory=lambda: [CUSTOM])
     exilus_options: list[str] = rx.field(default_factory=lambda: [CUSTOM])
     arcane_options: list[str] = rx.field(default_factory=lambda: [CUSTOM])
+    slot_upgrade_options: list[list[str]] = rx.field(
+        default_factory=lambda: [[CUSTOM] for _ in SLOT_CONFIGS]
+    )
 
     progenitor_element: str = NO_EFFECT
     progenitor_value: float = 0.0
@@ -327,6 +330,8 @@ class CalculatorState(rx.State):
     def set_slot_upgrade(self, index: int, value: str):
         if not 0 <= index < len(SLOT_CONFIGS):
             return
+        if value not in self.slot_upgrade_options[index]:
+            return
         selected = list(self.slot_selected_upgrades)
         selected[index] = value
         self.slot_selected_upgrades = selected
@@ -359,6 +364,7 @@ class CalculatorState(rx.State):
         conditions_enabled = list(self.slot_conditions_enabled)
         conditions_enabled[index] = True
         self.slot_conditions_enabled = conditions_enabled
+        self._refresh_slot_upgrade_options()
         self._refresh_slot_condition_metadata()
         self._recalculate()
 
@@ -564,7 +570,36 @@ class CalculatorState(rx.State):
         if changed:
             self.slot_selected_upgrades = selected
 
+        self._refresh_slot_upgrade_options()
         self._refresh_slot_condition_metadata()
+
+    def _refresh_slot_upgrade_options(self):
+        selected = self.slot_selected_upgrades
+        options: list[list[str]] = []
+        for index, config in enumerate(SLOT_CONFIGS):
+            base_options = (
+                self.arcane_options
+                if config["kind"] == "arcane"
+                else self.exilus_options
+                if config["exilus"]
+                else self.mod_options
+            )
+            selected_elsewhere = {
+                upgrade
+                for other_index, upgrade in enumerate(selected)
+                if other_index != index and upgrade != CUSTOM
+            }
+            current = selected[index]
+            options.append(
+                [
+                    upgrade
+                    for upgrade in base_options
+                    if upgrade == CUSTOM
+                    or upgrade == current
+                    or upgrade not in selected_elsewhere
+                ]
+            )
+        self.slot_upgrade_options = options
 
     def _refresh_slot_condition_metadata(self):
         has_conditionals: list[bool] = []

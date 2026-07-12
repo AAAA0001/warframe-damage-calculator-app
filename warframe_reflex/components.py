@@ -698,12 +698,7 @@ def slot_editor_field(field: rx.Var[EditorField], index: int) -> rx.Component:
 
 
 def slot_options(index: int):
-    config = SLOT_CONFIGS[index]
-    if config["kind"] == "arcane":
-        return CalculatorState.arcane_options
-    if config["exilus"]:
-        return CalculatorState.exilus_options
-    return CalculatorState.mod_options
+    return CalculatorState.slot_upgrade_options[index]
 
 
 def database_slot_body(index: int) -> rx.Component:
