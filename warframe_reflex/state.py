@@ -867,14 +867,11 @@ class CalculatorState(rx.State):
             else:
                 self.weakpoint_result_metrics = weakpoint_metrics(weapon)
                 self.misc_result_metrics = ranged_misc_metrics(weapon)
-                self.ranged_result_metrics = [
-                    metric
-                    for pair in zip(
-                        self.main_result_metrics,
-                        self.weakpoint_result_metrics,
-                    )
-                    for metric in pair
-                ] + self.misc_result_metrics
+                self.ranged_result_metrics = (
+                    self.main_result_metrics
+                    + self.weakpoint_result_metrics
+                    + self.misc_result_metrics
+                )
             self.damage_result_rows = effective_damage_rows(
                 weapon,
                 melee=self.selected_weapon_type == "Melee",
