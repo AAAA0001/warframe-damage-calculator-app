@@ -991,6 +991,7 @@ def damage_table() -> rx.Component:
     )
     return rx.box(
         rx.cond(CalculatorState.melee_weapon, melee_table, ranged_table),
+        class_name="damage-table-container",
         width="100%",
         overflow_x="auto",
     )
@@ -1038,18 +1039,14 @@ def result_tabs() -> rx.Component:
         rx.tabs.content(
             rx.vstack(
                 rx.text("Weapon Summary", class_name="card-title"),
-                rx.code_block(
+                rx.el.pre(
                     CalculatorState.result_summary,
-                    language="log",
-                    width="100%",
-                    wrap_long_lines=True,
+                    class_name="plain-text-summary",
                 ),
                 rx.text("Upgrade Contributions", class_name="card-title"),
-                rx.code_block(
+                rx.el.pre(
                     CalculatorState.result_contribution_summary,
-                    language="log",
-                    width="100%",
-                    wrap_long_lines=True,
+                    class_name="plain-text-summary",
                 ),
                 width="100%",
                 gap="3",

@@ -220,6 +220,32 @@ body {
   background: rgba(130, 30, 25, 0.2);
 }
 
+.plain-text-summary {
+  width: 100%;
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.damage-table-container table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.damage-table-container th,
+.damage-table-container td {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 620px) {
   .page-shell {
     padding: 0.75rem 0.65rem 2.5rem;
