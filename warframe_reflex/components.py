@@ -165,18 +165,12 @@ def mobile_quick_nav() -> rx.Component:
 def read_me() -> rx.Component:
     return rx.accordion.root(
         rx.accordion.item(
-            header=rx.accordion.header(
-                rx.accordion.trigger(
-                    rx.hstack(
-                        rx.text("Read Me"),
-                        rx.spacer(),
-                        rx.accordion.icon(),
-                        width="100%",
-                    )
-                )
+            header=rx.hstack(
+                rx.text("Read Me"),
+                rx.spacer(),
+                width="100%",
             ),
-            content=rx.accordion.content(
-                rx.vstack(
+            content=rx.vstack(
                     rx.heading("Disclaimer", size="4"),
                     rx.text(
                         "This interface is a companion for the warframe_damage_calculator Python library. The library remains the source of truth for all damage calculations."
@@ -192,12 +186,12 @@ def read_me() -> rx.Component:
                     rx.hstack(
                         rx.link(
                             "Web app source",
-                            href="https://github.com/AAAA0001/warframe-damage-calculator-web",
+                            href="https://github.com/MX055/warframe-damage-calculator-app",
                             is_external=True,
                         ),
                         rx.link(
                             "Python library",
-                            href="https://github.com/AAAA0001/warframe-damage-calculator",
+                            href="https://github.com/MX055/warframe-damage-calculator",
                             is_external=True,
                         ),
                         gap="4",
@@ -207,7 +201,6 @@ def read_me() -> rx.Component:
                     gap="3",
                     width="100%",
                     padding_top="0.5rem",
-                )
             ),
             value="read-me",
         ),

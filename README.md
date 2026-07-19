@@ -27,7 +27,7 @@ uv run reflex run
 
 ```bash
 py -m pip install "reflex>=0.9.6.post1,<0.10"
-py -m pip install "warframe-damage-calculator @ git+https://github.com/AAAA0001/warframe-damage-calculator.git@main"
+py -m pip install "warframe-damage-calculator @ git+https://github.com/MX055/warframe-damage-calculator.git@main"
 reflex run
 ```
 
