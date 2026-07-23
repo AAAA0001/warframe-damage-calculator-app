@@ -1210,7 +1210,7 @@ class CalculatorState(rx.State):
             self.selected_weapon_type,
             self.selected_weapon,
         )
-        return bool(metadata.get("progenitor", False) or (metadata.get("ammo") or {}).get("is_progenitor", False))
+        return bool(metadata.get("progenitor", False))
 
     def _get_damage_fields(self, group: str) -> list[EditorField]:
         return getattr(self, f"{group}_fields", [])
